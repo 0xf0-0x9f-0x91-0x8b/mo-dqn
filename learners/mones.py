@@ -135,7 +135,7 @@ class MONES(object):
         # directly compute inverse Fisher Information Matrix (FIM)
         # only works because we use gaussian (and no correlation between variables) 
         fim_mu_inv = torch.diag(sigma.detach()**2)
-        fim_sigma_inv = torch.diag(2/sigma.detach()**2)
+        fim_sigma_inv = torch.diag(sigma.detach()**4*2)
 
         loss = -log_prob*metric
 
@@ -149,6 +149,8 @@ class MONES(object):
         sigma.grad = nat_grad_sigma
 
         self.opt.step()
+        # using Adam results in negative sigma values, should not be necessary using SGD
+        sigma.data = torch.abs(sigma.data)
 
         return {'returns': returns, 'metric': np.mean(indicator_metric)}
 
