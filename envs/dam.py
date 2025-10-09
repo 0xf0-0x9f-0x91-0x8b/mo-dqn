@@ -1,6 +1,6 @@
-import gym
+import gymnasium as gym
 import numpy as np
-from gym.envs.registration import register
+from gymnasium.envs.registration import register
 
 
 register(
@@ -56,7 +56,8 @@ class Dam(gym.Env):
         
         self.reward_space = gym.spaces.Box(-np.inf, np.inf, shape=(nO,))
 
-    def reset(self):
+    def reset(self, *, seed=None, options=None):
+        super().reset(seed=seed)
         if not self.penalize:
             state = np.random.choice(Dam.s_init, size=1)
         else:
@@ -98,4 +99,4 @@ class Dam(gym.Env):
         reward = reward + penalty
 
         self.state = n_state
-        return n_state, reward, False, {}
+        return n_state, reward, False, False, {}

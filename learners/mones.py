@@ -28,7 +28,7 @@ def run_episode(env, model):
         with torch.no_grad():
             action = model(torch.from_numpy(o).float()[:,None])
             action = action.detach().numpy().flatten()
-        n_o, r, done, _ = env.step(action)
+        n_o, r, done, _, _ = env.step(action)
         e_r += r
         o = n_o
 
