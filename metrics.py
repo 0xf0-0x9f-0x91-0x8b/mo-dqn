@@ -41,7 +41,7 @@ def crowding_distance(points, ranks=None):
             crowding[current_i] = 1
             continue
         # first normalize accross dimensions
-        current = (current-current.min(axis=0))/(current.ptp(axis=0)+1e-8)
+        current = (current - current.min(axis=0)) / (np.ptp(current, axis=0) + 1e-8)
         # sort points per dimension
         dim_sorted = np.argsort(current, axis=0)
         point_sorted = np.take_along_axis(current, dim_sorted, axis=0)

@@ -1,3 +1,5 @@
+from tqdm import trange
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -24,13 +26,16 @@ def run_episode(env, model):
 
     e_r = 0; done = False
     o = env.reset()
-    while not done:
+    steps = 0
+    max_steps = 2
+    while not done and steps < max_steps:
         with torch.no_grad():
             action = model(torch.from_numpy(o).float()[:,None])
             action = action.detach().numpy().flatten()
         n_o, r, done, _, _ = env.step(action)
         e_r += r
         o = n_o
+        steps += 1
 
     return torch.from_numpy(e_r).float()
 
@@ -86,7 +91,7 @@ class MONES(object):
         self.n_runs = n_runs
         self.ref_point = ref_point
         env = make_env()
-        self.n_objectives = 1 if not hasattr(env, 'reward_space') else len(env.reward_space.low)
+        self.n_objectives = 1 if not hasattr(env.unwrapped, 'reward_space') else len(env.unwrapped.reward_space.low)
 
         self.logdir = logdir
         self.logger = Logger(self.logdir)
@@ -168,6 +173,7 @@ class MONES(object):
                 self.logger.put('train/hypervolume', hv, i, 'scalar')
 
             print(f'Iteration {i} \t Metric {info["metric"]} \t')
+        self.logger.flush()
 
         print('='*20)
         print('DONE TRAINING, LAST POPULATION ND RETURNS')
@@ -183,13 +189,13 @@ class MONES(object):
             population.append(m_i)
             z.append(z_i)
         return population, torch.stack(z)
-
+    
     def evaluate_population(self, env, population):
         returns = torch.zeros(len(population), self.n_objectives)
-        for i in range(len(population)):
+        for i in trange(len(population), desc="Evaluating population"):
             p_return = torch.zeros(self.n_runs, self.n_objectives)
             for r in range(self.n_runs):
                 p_return[r] = run_episode(env, population[i])
             returns[i] = torch.mean(p_return, dim=0)
+    
         return returns
-
