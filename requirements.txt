@@ -1,0 +1,11 @@
+tqdm
+h5py
+moviepy
+numpy
+pandas
+matplotlib
+pygmo
+ipython
+opencv-python
+gymnasium
+torch --index-url https://download.pytorch.org/whl/cu126

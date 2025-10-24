@@ -27,7 +27,7 @@ def run_episode(env, model):
     e_r = 0; done = False
     o = env.reset()
     steps = 0
-    max_steps = 2
+    max_steps = 10
     while not done and steps < max_steps:
         with torch.no_grad():
             action = model(torch.from_numpy(o).float()[:,None])
