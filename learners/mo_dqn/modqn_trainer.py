@@ -24,7 +24,7 @@ class ReplayBuffer:
     Rewards are multi-objective vectors.
     """
 
-    def __init__(self, max_size: int = 10000):
+    def __init__(self, max_size: int = 50000):
         """
         Args:
             capacity: Maximum number of transitions to store
@@ -127,7 +127,7 @@ class MODQNTrainer:
     """
 
     def __init__(self, policy: MODQN, lr: float, gamma: float, batch_size: int,
-                 replay_buffer: ReplayBuffer, env, target_update_freq: int = 100, epsilon_decay = 0.9999):
+                 replay_buffer: ReplayBuffer, env, target_update_freq: int = 500, epsilon_decay = 0.9999, updates_per_episode=1):
         """
         Initialize the MODQN trainer.
 
@@ -153,6 +153,7 @@ class MODQNTrainer:
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
         self.epsilon_decay = epsilon_decay
+        self.updates_per_episode = updates_per_episode
 
         self.episode_count = 0
         self.update_count = 0
@@ -163,21 +164,30 @@ class MODQNTrainer:
 
         # Initialize tensorboard
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_name = f"modqn_lr{lr}_g{gamma}_utilityfn{str(policy.utility_fn)}_{timestamp}"
         self.log_dir = 'outputs/logs'
-        self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, f"modqn_{timestamp}"))
+        self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, run_name))
 
         # Log hyperparameters to tensorboard
-        self.writer.add_text('hyperparameters/lr', str(lr))
-        self.writer.add_text('hyperparameters/gamma', str(gamma))
-        self.writer.add_text('hyperparameters/batch_size', str(batch_size))
-        self.writer.add_text('hyperparameters/target_update_freq', str(target_update_freq))
-        self.writer.add_text('hyperparameters/utility_fn', str(policy.utility_fn.tolist()))
+        hparam_dict = {
+            'lr': lr,
+            'gamma': gamma,
+            'batch_size': batch_size,
+            'target_update_freq': target_update_freq,
+            'epsilon_decay': self.epsilon_decay,
+            'updates_per_episode': self.updates_per_episode,
+            'max_buffer_size': replay_buffer.max_size,
+            'utility_fn_0': policy.utility_fn[0].item(),
+            'utility_fn_1': policy.utility_fn[1].item(),
+            'utility_fn_2': policy.utility_fn[2].item(),
+            'layer_sizes': str(policy.layer_sizes),  # Convert to string for hparams
+        }
+        metric_dict = {'final_return': 0}  # Will be updated at end of training
+        self.writer.add_hparams(hparam_dict, metric_dict)
 
 
-    def train(self, num_episodes: int, warmup_episodes: int = 50,
-              epsilon_start: float = 1.0, epsilon_end: float = 0.01,
-              updates_per_episode: int = 1,
-              log_freq: int = 10) -> None:
+    def train(self, num_episodes: int, warmup_episodes: int = 100,
+              epsilon_start: float = 1.0, epsilon_end: float = 0.01, log_freq: int = 10) -> None:
         """
         Train the MODQN network.
 
@@ -224,7 +234,7 @@ class MODQNTrainer:
             # Perform updates
             episode_losses = []
             if len(self.replay_buffer) >= self.batch_size:
-                for _ in range(updates_per_episode):
+                for _ in range(self.updates_per_episode):
                     batch = self.replay_buffer.sample(self.batch_size)
                     loss = self.update(batch)
                     episode_losses.append(loss)
@@ -237,8 +247,9 @@ class MODQNTrainer:
                 self.writer.add_scalar('train/avg_loss_per_episode', avg_loss, self.episode_count)
 
             # Update target network
-            if self.episode_count % self.target_update_freq == 0:
+            if self.update_count > 0 and self.update_count % self.target_update_freq == 0:
                 self.target_policy.model.load_state_dict(self.policy.model.state_dict())
+                print(f"  [Update {self.update_count}] Target network updated")
 
             # Decay epsilon
             #epsilon = epsilon_start - epsilon_start * (episode / num_episodes)
@@ -303,6 +314,7 @@ class MODQNTrainer:
         loss = nn.functional.mse_loss(current_q, target_q)
         self.optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.policy.model.parameters(), max_norm=10.0)
         self.optimizer.step()
 
         # Log Q-value stats
@@ -364,10 +376,12 @@ if __name__ == "__main__":
     hyperparameters = { # List of HP combinations to iterate through.
         'lr': [0.001, 0.0005],
         'gamma': [0.99],
-        'batch_size': [512],
+        'batch_size': [256],
         'utility_fn': [[0.6, 0.4, 0.0], [0.4, 0.3, 0.3]],
-        'layer_sizes': [[128, 128]],
-        'epsilon_decay': [0.9999, 0.9998]
+        'layer_sizes': [[128, 128]], # [128, 256, 128]
+        'epsilon_decay': [0.9997], #0.9995,
+        'updates_per_episode': [4],
+        'max_buffer_size':[50000]
     }
 
     # Init env and set action/obs/objective sizes
@@ -389,7 +403,7 @@ if __name__ == "__main__":
 
         # Init classes
         policy = MODQN(params['utility_fn'], num_actions, num_obs, num_objectives, params['layer_sizes'])
-        replay_buffer = ReplayBuffer()
-        trainer = MODQNTrainer(policy, params['lr'], params['gamma'], params['batch_size'], replay_buffer, env, epsilon_decay = params['epsilon_decay'])
+        replay_buffer = ReplayBuffer(max_size=params['max_buffer_size'])
+        trainer = MODQNTrainer(policy, params['lr'], params['gamma'], params['batch_size'], replay_buffer, env, epsilon_decay = params['epsilon_decay'],updates_per_episode=params['updates_per_episode'])
 
         trainer.train(num_episodes)

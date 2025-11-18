@@ -25,6 +25,15 @@ class MODQN:
             layer_sizes: List of layer sizes for the model
         """
 
+        # Build the model dynamically based on layer_sizes
+        layers = [nn.Linear(num_obs, layer_sizes[0]), nn.ReLU()]
+        for i in range(len(layer_sizes) - 1):
+            layers.append(nn.Linear(layer_sizes[i], layer_sizes[i + 1]))
+            layers.append(nn.ReLU())
+        layers.append(nn.Linear(layer_sizes[-1], num_actions * num_objectives))
+
+        self.model = nn.Sequential(*layers)
+
         self.model = nn.Sequential(
             nn.Linear(num_obs, layer_sizes[0]),
             nn.ReLU(),
