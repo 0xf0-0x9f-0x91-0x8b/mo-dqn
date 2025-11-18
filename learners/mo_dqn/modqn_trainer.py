@@ -1,3 +1,4 @@
+import itertools
 from datetime import datetime
 import os
 import random
@@ -126,7 +127,7 @@ class MODQNTrainer:
     """
 
     def __init__(self, policy: MODQN, lr: float, gamma: float, batch_size: int,
-                 replay_buffer: ReplayBuffer, env, target_update_freq: int = 100):
+                 replay_buffer: ReplayBuffer, env, target_update_freq: int = 100, epsilon_decay = 0.9999):
         """
         Initialize the MODQN trainer.
 
@@ -140,7 +141,7 @@ class MODQNTrainer:
         """
 
         self.policy = policy
-        self.target_policy = MODQN(policy.utility_fn.tolist(), policy.num_actions, policy.num_obs, policy.num_objectives, [64, 64]) # target policy, same size as learning policy
+        self.target_policy = MODQN(policy.utility_fn.tolist(), policy.num_actions, policy.num_obs, policy.num_objectives, self.policy.layer_sizes) # target policy, same size as learning policy
         self.target_policy.model.load_state_dict(policy.model.state_dict())
         self.replay_buffer = replay_buffer
         self.env = env
@@ -151,6 +152,7 @@ class MODQNTrainer:
         self.gamma = gamma
         self.batch_size = batch_size
         self.target_update_freq = target_update_freq
+        self.epsilon_decay = epsilon_decay
 
         self.episode_count = 0
         self.update_count = 0
@@ -172,9 +174,9 @@ class MODQNTrainer:
         self.writer.add_text('hyperparameters/utility_fn', str(policy.utility_fn.tolist()))
 
 
-    def train(self, num_episodes: int, warmup_episodes: int = 10,
+    def train(self, num_episodes: int, warmup_episodes: int = 50,
               epsilon_start: float = 1.0, epsilon_end: float = 0.01,
-              epsilon_decay: float = 0.998, updates_per_episode: int = 1,
+              updates_per_episode: int = 1,
               log_freq: int = 10) -> None:
         """
         Train the MODQN network.
@@ -239,7 +241,8 @@ class MODQNTrainer:
                 self.target_policy.model.load_state_dict(self.policy.model.state_dict())
 
             # Decay epsilon
-            epsilon = max(epsilon_end, epsilon * epsilon_decay)
+            #epsilon = epsilon_start - epsilon_start * (episode / num_episodes)
+            epsilon = max(epsilon_end, epsilon * self.epsilon_decay)
 
             # Logging
             if (episode + 1) % log_freq == 0:
@@ -357,13 +360,15 @@ if __name__ == "__main__":
 
     # Configurable parameters
     config = 'resource-gathering' # Or 'mones'
-    # TODO add hyperparameter sweep.
-    lr = 0.0005
-    gamma = 0.99
-    batch_size = 64
-    num_episodes = 3000
-    utility_fn = [0.4, 0.3, 0.3]
-    layer_sizes = [64, 64]
+    num_episodes = 10000
+    hyperparameters = { # List of HP combinations to iterate through.
+        'lr': [0.001, 0.0005],
+        'gamma': [0.99],
+        'batch_size': [512],
+        'utility_fn': [[0.6, 0.4, 0.0], [0.4, 0.3, 0.3]],
+        'layer_sizes': [[128, 128]],
+        'epsilon_decay': [0.9999, 0.9998]
+    }
 
     # Init env and set action/obs/objective sizes
     if config == 'resource-gathering':
@@ -375,9 +380,16 @@ if __name__ == "__main__":
     else:
         raise ValueError(f'Unknown config: {config}')
 
-    # Init classes
-    policy = MODQN(utility_fn, num_actions, num_obs, num_objectives, layer_sizes)
-    replay_buffer = ReplayBuffer()
-    trainer = MODQNTrainer(policy, lr, gamma, batch_size, replay_buffer, env)
 
-    trainer.train(num_episodes)
+    # Run hyperparameter sweep over HPs set in dictionary
+    combinations = [dict(zip(hyperparameters.keys(), v)) for v in itertools.product(*hyperparameters.values())]
+    print(f"Running hyperparameter sweep with {len(combinations)} configurations...")
+    for i, params in enumerate(combinations):
+        print(f"{'=' * 60}\nConfiguration {i + 1}/{len(combinations)}\nParameters: {params}\n{'=' * 60}\n")
+
+        # Init classes
+        policy = MODQN(params['utility_fn'], num_actions, num_obs, num_objectives, params['layer_sizes'])
+        replay_buffer = ReplayBuffer()
+        trainer = MODQNTrainer(policy, params['lr'], params['gamma'], params['batch_size'], replay_buffer, env, epsilon_decay = params['epsilon_decay'])
+
+        trainer.train(num_episodes)

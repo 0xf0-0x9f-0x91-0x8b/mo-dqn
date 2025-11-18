@@ -32,6 +32,7 @@ class MODQN:
             nn.ReLU(),
             nn.Linear(layer_sizes[1], num_actions * num_objectives)
         )
+        self.layer_sizes = layer_sizes
 
         self.utility_fn = torch.tensor(utility_fn, dtype=torch.float32)
         self.num_actions = num_actions
