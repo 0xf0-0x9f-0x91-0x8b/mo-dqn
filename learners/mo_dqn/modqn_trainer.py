@@ -164,7 +164,7 @@ class MODQNTrainer:
 
         # Initialize tensorboard
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_name = f"modqn_lr{lr}_g{gamma}_utilityfn{str(policy.utility_fn[0]), str(policy.utility_fn[1]), str(policy.utility_fn[2])}_{timestamp}"
+        run_name = f"modqn_lr{lr}_g{gamma}_UPE{self.updates_per_episode}_layers{list(self.policy.layer_sizes)}_{timestamp}"
         self.log_dir = 'outputs/logs'
         self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, run_name))
 
@@ -373,17 +373,21 @@ if __name__ == "__main__":
 
     # Configurable parameters
     config = 'resource-gathering' # Or 'mones'
-    num_episodes = 25000
+    num_episodes = 50000
     hyperparameters = { # List of HP combinations to iterate through.
         'lr': [0.0005],
         'gamma': [0.99],
         'batch_size': [256, 512],
-        'utility_fn': [[0.6, 0.4, 0.0], [0.4, 0.3, 0.3]],
+        'utility_fn': [[0.4, 0.3, 0.3]],
         'layer_sizes': [[128, 128], [128, 256, 128]],
         'epsilon_decay': [0.9997], #0.9995,
         'updates_per_episode': [4, 7],
         'max_buffer_size':[50000]
     }
+
+    # Best run from HP sweeps so far:
+    #   Utility fn (0.4, 0.3, 0.3) is good
+    #   LR 0.0005, gamma 0.99,
 
     # Init env and set action/obs/objective sizes
     if config == 'resource-gathering':
