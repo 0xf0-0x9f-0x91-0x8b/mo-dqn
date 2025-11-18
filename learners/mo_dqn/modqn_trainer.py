@@ -164,12 +164,12 @@ class MODQNTrainer:
 
         # Initialize tensorboard
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        run_name = f"modqn_lr{lr}_g{gamma}_utilityfn{str(policy.utility_fn)}_{timestamp}"
+        run_name = f"modqn_lr{lr}_g{gamma}_utilityfn{str(policy.utility_fn[0]), str(policy.utility_fn[1]), str(policy.utility_fn[2])}_{timestamp}"
         self.log_dir = 'outputs/logs'
         self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, run_name))
 
         # Log hyperparameters to tensorboard
-        hparam_dict = {
+        self.hparam_dict = {
             'lr': lr,
             'gamma': gamma,
             'batch_size': batch_size,
@@ -182,8 +182,8 @@ class MODQNTrainer:
             'utility_fn_2': policy.utility_fn[2].item(),
             'layer_sizes': str(policy.layer_sizes),  # Convert to string for hparams
         }
-        metric_dict = {'final_return': 0}  # Will be updated at end of training
-        self.writer.add_hparams(hparam_dict, metric_dict)
+        self.metric_dict = {'final_return': 0}  # Will be updated at end of training
+        #self.writer.add_hparams(hparam_dict, metric_dict)
 
 
     def train(self, num_episodes: int, warmup_episodes: int = 100,
@@ -271,6 +271,7 @@ class MODQNTrainer:
         print("Training complete")
         print(f"Tensorboard logs saved to: {self.writer.log_dir}")
         self.save_checkpoint(num_episodes, final=True)
+        self.writer.add_hparams(self.hparam_dict, {'final_return': rollout_stats['episode_return']})
 
 
     def update(self, batch: Tuple) -> float:
@@ -372,15 +373,15 @@ if __name__ == "__main__":
 
     # Configurable parameters
     config = 'resource-gathering' # Or 'mones'
-    num_episodes = 10000
+    num_episodes = 25000
     hyperparameters = { # List of HP combinations to iterate through.
-        'lr': [0.001, 0.0005],
+        'lr': [0.0005],
         'gamma': [0.99],
-        'batch_size': [256],
+        'batch_size': [256, 512],
         'utility_fn': [[0.6, 0.4, 0.0], [0.4, 0.3, 0.3]],
-        'layer_sizes': [[128, 128]], # [128, 256, 128]
+        'layer_sizes': [[128, 128], [128, 256, 128]],
         'epsilon_decay': [0.9997], #0.9995,
-        'updates_per_episode': [4],
+        'updates_per_episode': [4, 7],
         'max_buffer_size':[50000]
     }
 
