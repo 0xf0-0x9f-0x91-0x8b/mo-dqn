@@ -6,3 +6,4 @@ ipython
 gymnasium
 torch
 mo-gymnasium
+tensorboard
