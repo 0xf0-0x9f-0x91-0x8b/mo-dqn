@@ -25,6 +25,7 @@ class MODQN:
             layer_sizes: List of layer sizes for the model
         """
 
+        self.layer_sizes = layer_sizes
         # Build the model dynamically based on layer_sizes
         layers = [nn.Linear(num_obs, layer_sizes[0]), nn.ReLU()]
         for i in range(len(layer_sizes) - 1):
@@ -33,15 +34,6 @@ class MODQN:
         layers.append(nn.Linear(layer_sizes[-1], num_actions * num_objectives))
 
         self.model = nn.Sequential(*layers)
-
-        self.model = nn.Sequential(
-            nn.Linear(num_obs, layer_sizes[0]),
-            nn.ReLU(),
-            nn.Linear(layer_sizes[0], layer_sizes[1]),
-            nn.ReLU(),
-            nn.Linear(layer_sizes[1], num_actions * num_objectives)
-        )
-        self.layer_sizes = layer_sizes
 
         self.utility_fn = torch.tensor(utility_fn, dtype=torch.float32)
         self.num_actions = num_actions
