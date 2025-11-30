@@ -13,7 +13,7 @@ from collections import deque
 from mo_dqn_policy import MODQN
 import gymnasium as gym
 import mo_gymnasium as mo_gym
-import envs.dam # For MONES
+#import envs.dam # For MONES
 
 
 class ReplayBuffer:
@@ -146,6 +146,11 @@ class MODQNTrainer:
         self.replay_buffer = replay_buffer
         self.env = env
         self.optimizer = optim.Adam(policy.model.parameters(), lr=lr)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(
+            self.optimizer,
+            step_size=100000,    # number of update steps
+            gamma=0.9          # multiply LR by this factor
+        )
 
         # Hyperparameters
         self.lr = lr
@@ -186,8 +191,8 @@ class MODQNTrainer:
         #self.writer.add_hparams(hparam_dict, metric_dict)
 
 
-    def train(self, num_episodes: int, warmup_episodes: int = 100,
-              epsilon_start: float = 1.0, epsilon_end: float = 0.01, log_freq: int = 10) -> None:
+    def train(self, num_episodes: int, warmup_episodes: int = 1000,
+              epsilon_start: float = 1.0, epsilon_end: float = 0.03, log_freq: int = 10) -> None:
         """
         Train the MODQN network.
 
@@ -210,17 +215,18 @@ class MODQNTrainer:
         # Warmup phase: fill replay buffer
         print("Filling buffer")
         for _ in range(warmup_episodes):
-            rollout_stats = self.replay_buffer.collect_rollout(self.env, self.policy, num_steps=1000, epsilon=1.0)
+            rollout_stats = self.replay_buffer.collect_rollout(self.env, self.policy, num_steps=50, epsilon=1.0)
         print('Buffer filled')
         print("-" * 60)
 
         # Main training loop
         print('Beginning main training loop')
         for episode in range(num_episodes):
+            print("Episode:", episode)
             self.episode_count += 1
 
             # Collect rollout
-            rollout_stats = self.replay_buffer.collect_rollout(self.env, self.policy, num_steps=1000, epsilon=epsilon)
+            rollout_stats = self.replay_buffer.collect_rollout(self.env, self.policy, num_steps=100, epsilon=epsilon)
 
             # Log to tensorboard
             self.writer.add_scalar('train/episode_return', rollout_stats['episode_return'], self.episode_count)
@@ -239,6 +245,12 @@ class MODQNTrainer:
                     loss = self.update(batch)
                     episode_losses.append(loss)
 
+                    # soft update for target network
+                    tau = 0.005
+                    for param, target_param in zip(self.policy.model.parameters(),
+                                                self.target_policy.model.parameters()):
+                        target_param.data.copy_(tau * param.data + (1 - tau) * target_param.data)
+
                     self.writer.add_scalar('train/loss_per_update', loss, self.update_count)
                     self.update_count += 1
 
@@ -247,9 +259,9 @@ class MODQNTrainer:
                 self.writer.add_scalar('train/avg_loss_per_episode', avg_loss, self.episode_count)
 
             # Update target network
-            if self.update_count > 0 and self.update_count % self.target_update_freq == 0:
-                self.target_policy.model.load_state_dict(self.policy.model.state_dict())
-                print(f"  [Update {self.update_count}] Target network updated")
+            #if self.update_count > 0 and self.update_count % self.target_update_freq == 0:
+            #    self.target_policy.model.load_state_dict(self.policy.model.state_dict())
+            #    print(f"  [Update {self.update_count}] Target network updated")
 
             # Decay epsilon
             #epsilon = epsilon_start - epsilon_start * (episode / num_episodes)
@@ -266,6 +278,8 @@ class MODQNTrainer:
                       )
                 if rollout_stats['mo_return'] is not None:
                     print(f"  MO Return: {rollout_stats['mo_return']}")
+                    for param_group in self.optimizer.param_groups:
+                        print("Current LR:", param_group['lr'])
 
         print("-" * 60)
         print("Training complete")
@@ -317,6 +331,7 @@ class MODQNTrainer:
         loss.backward()
         torch.nn.utils.clip_grad_norm_(self.policy.model.parameters(), max_norm=10.0)
         self.optimizer.step()
+        self.scheduler.step()
 
         # Log Q-value stats
         if self.update_count % 10 == 0:
@@ -373,15 +388,15 @@ if __name__ == "__main__":
 
     # Configurable parameters
     config = 'resource-gathering' # Or 'mones'
-    num_episodes = 50000
+    num_episodes = 10000
     hyperparameters = { # List of HP combinations to iterate through.
         'lr': [0.0005],
         'gamma': [0.99],
-        'batch_size': [256, 512],
+        'batch_size': [256],
         'utility_fn': [[0.4, 0.3, 0.3]],
-        'layer_sizes': [[128, 128], [128, 256, 128]],
+        'layer_sizes': [[128, 128]],
         'epsilon_decay': [0.9997], #0.9995,
-        'updates_per_episode': [4, 7],
+        'updates_per_episode': [50],
         'max_buffer_size':[50000]
     }
 
